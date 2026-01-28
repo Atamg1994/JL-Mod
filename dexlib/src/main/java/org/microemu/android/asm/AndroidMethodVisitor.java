@@ -67,7 +67,12 @@ public class AndroidMethodVisitor extends MethodVisitor {
 					mv.visitLdcInsn(1L);
 					mv.visitMethodInsn(opcode, owner, "sleep", "(J)V", false);
 					return;
-				}
+				} else if (str5.equals("sleep")) {
+                    mv.visitLdcInsn(Long.valueOf(4)); //# Your divisor. Then you'll substitute the getter from the settings here.
+                    mv.visitInsn(109); //# LDIV (Long Division) Instruction
+                    mv.visitMethodInsn(i, str, "sleep", "(J)V", false);
+                    return;
+                }
 				break;
 			case "java/lang/String":
 				if (name.equals("<init>") && desc.startsWith("([B") && !desc.endsWith("Ljava/lang/String;)V")) {
