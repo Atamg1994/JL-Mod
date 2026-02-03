@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-          fetch-depth: 0 # Нужно для корректного лога git
+          fetch-depth: 0
 
       - name: set up JDK 17
         uses: actions/setup-java@v4
@@ -22,17 +22,18 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Decode Keystore
-        env:
-          ENCODED_KEYSTORE: ${{ secrets.SIGNING_KEY }}
-          ENCODED_PROPS: ${{ secrets.KEYSTORE_PROPERTIES }}
+      - name: Setup Debug Signing
         run: |
-          if [ -z "$ENCODED_PROPS" ]; then
-            echo "Secrets not found, skipping decoding..."
-          else
-            echo "$ENCODED_KEYSTORE" | base64 -di > keystore.jks
-            echo "$ENCODED_PROPS" | base64 -di > keystore.properties
-          fi
+          # Генерируем дебажный ключ
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US"
+          
+          # Создаем файл свойств, который ожидает gradle на 41 строке
+          # Файл создается в корне проекта
+          echo "storeFile=/home/runner/.android/debug.keystore" > keystore.properties
+          echo "storePassword=android" >> keystore.properties
+          echo "keyAlias=androiddebugkey" >> keystore.properties
+          echo "keyPassword=android" >> keystore.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -43,7 +44,6 @@ jobs:
       - name: Get version
         id: get_version
         run: |
-          # Берем последнее слово из коммита как версию или дефолт 'v1.0.0'
           msg=$(git log -1 --pretty=format:"%s")
           version=$(echo "${msg##* }" | tr -d '[:space:]')
           [[ -z "$version" ]] && version="v1.0.0"
@@ -52,10 +52,13 @@ jobs:
       - name: Prepare symbols
         run: |
           mkdir -p artifact/mapping
-          # Используем find, чтобы избежать ошибок "No such file or directory" при пустых папках
           find app/build/outputs/native-debug-symbols -type f -exec cp {} artifact/ \; 2>/dev/null || true
           find app/build/outputs/mapping -type f -exec cp {} artifact/mapping/ \; 2>/dev/null || true
-          cd artifact && zip -r ../symbols.zip .
+          if [ -d "artifact" ]; then
+            cd artifact && zip -r ../symbols.zip .
+          else
+            touch ../symbols.zip
+          fi
 
       - name: Draft GitHub Release
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
